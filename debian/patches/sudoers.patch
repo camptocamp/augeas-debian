@@ -1,0 +1,48 @@
+Description: allow "!" as a type of Defaults entry if /etc/sudoers
+Origin: upstream, https://fedorahosted.org/augeas/changeset/ca4de75d8d8d15806d2859e10b589405b9df7afd/
+Bug-Debian: http://bugs.debian.org/650079
+Forwarded: not-needed
+Reviewed-By: Igor Pashev <pashev.igor@gmail.com>
+Last-Update: <2012-04-16
+
+--- augeas-0.10.0.orig/lenses/sudoers.aug
++++ augeas-0.10.0/lenses/sudoers.aug
+@@ -244,10 +244,11 @@ let alias = user_alias | runas_alias | h
+  *     > Default_Type ::= 'Defaults' |
+  *     >                  'Defaults' '@' Host_List |
+  *     >                  'Defaults' ':' User_List |
++ *     >                  'Defaults' '!' Cmnd_List |
+  *     >                  'Defaults' '>' Runas_List
+  *************************************************************************)
+ let default_type     =
+-  let value = store /[@:>][^ \t\n\\]+/ in
++  let value = store /[@:!>][^ \t\n\\]+/ in
+   [ label "type" . value ]
+ 
+ (************************************************************************
+--- augeas-0.10.0.orig/lenses/tests/test_sudoers.aug
++++ augeas-0.10.0/lenses/tests/test_sudoers.aug
+@@ -26,6 +26,7 @@ Cmnd_Alias \
+ Defaults   !visiblepw
+ 
+ Defaults:buildd env_keep+=\"APT_CONFIG DEBIAN_FRONTEND SHELL\"
++Defaults!PBUILDER env_keep+=\"HOME ARCH DIST DISTRIBUTION PDEBUILD_PBUILDER\"
+ 
+ # User privilege specification
+ root    ALL=(ALL) ALL
+@@ -100,6 +101,15 @@ www-data +biglab=(rpinson)NOEXEC: ICAL \
+               { "var" = "APT_CONFIG" }
+               { "var" = "DEBIAN_FRONTEND" }
+               { "var" = "SHELL" } } }
++      { "Defaults"
++          { "type" = "!PBUILDER" }
++          { "env_keep"
++              { "append" }
++              { "var" = "HOME" }
++              { "var" = "ARCH" }
++              { "var" = "DIST" }
++              { "var" = "DISTRIBUTION" }
++              { "var" = "PDEBUILD_PBUILDER" } } }
+       {}
+       { "#comment" = "User privilege specification" }
+       { "spec"

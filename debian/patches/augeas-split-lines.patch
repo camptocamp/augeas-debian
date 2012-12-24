@@ -1,0 +1,60 @@
+Description: Fix modprobe lense to handle lines split by \
+ .
+ This is cherrypicked from upstream, commits c0ff479c and e599fed9.
+Author: Dominic Cleal <dcleal@redhat.com>
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/netcf/+bug/1054306
+
+Index: augeas-0.10.0/lenses/modprobe.aug
+===================================================================
+--- augeas-0.10.0.orig/lenses/modprobe.aug	2012-09-24 22:53:09.000000000 -0500
++++ augeas-0.10.0/lenses/modprobe.aug	2012-09-24 22:53:54.661577143 -0500
+@@ -42,7 +42,7 @@
+ let sto_no_colons = store /[^:# \t\n\\\\]+/
+ 
+ (* View: sto_to_eol *)
+-let sto_to_eol = store /[^# \t\n\\\\][^#\n\\\\]*[^# \t\n\\\\]|[^# \t\n\\\\]/
++let sto_to_eol = store /(([^# \t\n\\\\][^#\n\\\\]*[ \t]*\\\\[ \t]*\n[ \t]*)*([^# \t\n\\\\][^#\n\\\\]*[^# \t\n\\\\]|[^# \t\n\\\\])|[^# \t\n\\\\])/
+ 
+ (* View: alias *)
+ let alias =
+Index: augeas-0.10.0/lenses/modules.aug
+===================================================================
+--- augeas-0.10.0.orig/lenses/modules.aug	2011-11-28 17:51:05.000000000 -0600
++++ augeas-0.10.0/lenses/modules.aug	2012-09-24 22:53:54.661577143 -0500
+@@ -20,8 +20,11 @@
+ (* View: word *)
+ let word = /[^#, \n\t\/]+/
+ 
++(* View: sto_line *)
++let sto_line = store /[^# \t\n].*[^ \t\n]|[^# \t\n]/
++
+ (* View: record *)
+-let record = [ key word . (Util.del_ws_tab . Modprobe.sto_to_eol)? . Util.eol ]
++let record = [ key word . (Util.del_ws_tab . sto_line)? . Util.eol ]
+ 
+ (* View: lns *)
+ let lns = ( Util.empty | Util.comment | record ) *
+Index: augeas-0.10.0/lenses/tests/test_modprobe.aug
+===================================================================
+--- augeas-0.10.0.orig/lenses/tests/test_modprobe.aug	2012-09-24 22:53:09.000000000 -0500
++++ augeas-0.10.0/lenses/tests/test_modprobe.aug	2012-09-24 22:53:47.921549271 -0500
+@@ -124,3 +124,19 @@
+     { "attr1" = "\"val\"" }
+     { "attr2" = "\"val2 val3\"" }
+   }
++
++(* Support multiline split commands, Ubuntu bug #1054306 *)
++test Modprobe.lns get "# /etc/modprobe.d/iwlwifi.conf
++# iwlwifi will dyamically load either iwldvm or iwlmvm depending on the
++# microcode file installed on the system. When removing iwlwifi, first
++# remove the iwl?vm module and then iwlwifi.
++remove iwlwifi \
++(/sbin/lsmod | grep -o -e ^iwlmvm -e ^iwldvm -e ^iwlwifi | xargs /sbin/rmmod) \
++&& /sbin/modprobe -r mac80211\n" =
++  { "#comment" = "/etc/modprobe.d/iwlwifi.conf" }
++  { "#comment" = "iwlwifi will dyamically load either iwldvm or iwlmvm depending on the" }
++  { "#comment" = "microcode file installed on the system. When removing iwlwifi, first" }
++  { "#comment" = "remove the iwl?vm module and then iwlwifi." }
++  { "remove" = "iwlwifi"
++    { "command" = "(/sbin/lsmod | grep -o -e ^iwlmvm -e ^iwldvm -e ^iwlwifi | xargs /sbin/rmmod) \\\n&& /sbin/modprobe -r mac80211" }
++  }

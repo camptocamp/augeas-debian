@@ -1,0 +1,80 @@
+Description: support softdep command for modprobe
+Origin: upstream, https://fedorahosted.org/augeas/changeset/817c8591fe1e4c60b736e9c0249d88d739015afc/
+Bug-Debian: http://bugs.debian.org/641813
+Forwarded: not-needed
+Reviewed-By: Igor Pashev <pashev.igor@gmail.com>
+Last-Update: <2012-04-16>
+
+--- augeas-0.10.0.orig/lenses/modprobe.aug
++++ augeas-0.10.0/lenses/modprobe.aug
+@@ -38,6 +38,9 @@ let sep_space = del /([ \t]|(\\\\\n))+/
+ (* View: sto_no_spaces *)
+ let sto_no_spaces = store /[^# \t\n\\\\]+/
+ 
++(* View: sto_no_colons *)
++let sto_no_colons = store /[^:# \t\n\\\\]+/
++
+ (* View: sto_to_eol *)
+ let sto_to_eol = store /[^# \t\n\\\\][^#\n\\\\]*[^# \t\n\\\\]|[^# \t\n\\\\]/
+ 
+@@ -75,12 +78,22 @@ let config = Build.key_value_line_commen
+                        (store /binary_indexes|yes|no/)
+                        comment
+ 
++(* View: softdep *)
++let softdep =
++  let premod  = [ label "pre" . sep_space . sto_no_colons ] in
++    let pre   = sep_space . Util.del_str "pre:" . premod+ in
++  let postmod = [ label "post" . sep_space . sto_no_colons ] in
++    let post  = sep_space . Util.del_str "post:" . postmod+ in
++  [ key "softdep" . sep_space . sto_no_colons . pre? . post?
++    . Util.comment_or_eol ]
++
+ (* View: entry *)
+ let entry = alias
+           | options
+           | kv_line_command /install|remove/
+           | blacklist
+           | config
++          | softdep
+ 
+ (************************************************************************
+  * Group:                 LENS AND FILTER
+--- augeas-0.10.0.orig/lenses/tests/test_modprobe.aug
++++ augeas-0.10.0/lenses/tests/test_modprobe.aug
+@@ -26,7 +26,13 @@ install export_nodep-$BITNESS echo Insta
+ # Remove commands
+ remove bar echo Removing bar
+ remove foo echo Removing foo
+-remove export_nodep-$BITNESS echo Removing export_nodep\n"
++remove export_nodep-$BITNESS echo Removing export_nodep
++
++# Softdep
++softdep uhci-hcd post: foo
++softdep uhci-hcd pre: ehci-hcd foo
++softdep uhci-hcd pre: ehci-hcd foo post: foo
++"
+ 
+ test Modprobe.lns get conf =
+   { "#comment" = "Various aliases" }
+@@ -88,6 +94,20 @@ test Modprobe.lns get conf =
+   { "remove" = "export_nodep-$BITNESS"
+     { "command" = "echo Removing export_nodep" }
+   }
++  {  }
++  { "#comment" = "Softdep" }
++  { "softdep" = "uhci-hcd"
++    { "post" = "foo" }
++  }
++  { "softdep" = "uhci-hcd"
++    { "pre" = "ehci-hcd" }
++    { "pre" = "foo" }
++  }
++  { "softdep" = "uhci-hcd"
++    { "pre" = "ehci-hcd" }
++    { "pre" = "foo" }
++    { "post" = "foo" }
++  }
+ 
+ 
+ (* eol-comments *)

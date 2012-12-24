@@ -1,0 +1,33 @@
+Description: Adds extern "C" {}
+Origin: vendor
+Bug: https://fedorahosted.org/augeas/ticket/272
+Forwarded: https://fedorahosted.org/augeas/ticket/272
+Reviewed-By: Igor Pashev <pashev.igor@gmail.com>
+Last-Update: <2012-04-17>
+
+--- augeas-0.10.0.orig/src/augeas.h
++++ augeas-0.10.0/src/augeas.h
+@@ -54,6 +54,10 @@ enum aug_flags {
+                                      encountering error during aug_init */
+ };
+ 
++#ifdef __cplusplus
++extern "C" {
++#endif
++
+ /* Function: aug_init
+  *
+  * Initialize the library.
+@@ -381,6 +385,12 @@ const char *aug_error_minor_message(auge
+  * occurred. The returned value can only be used until the next API call
+  */
+ const char *aug_error_details(augeas *aug);
++
++
++#ifdef __cplusplus
++}
++#endif
++
+ #endif
+ 
+ 
