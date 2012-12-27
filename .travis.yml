@@ -1,0 +1,10 @@
+install:
+  - sudo apt-get update
+  - sudo apt-get install libxml2-dev libreadline-dev valgrind devscripts
+language: c
+notifications:
+  email: false
+  irc:
+    channels:
+      - "irc.freenode.org#augeas"
+script: debuild
