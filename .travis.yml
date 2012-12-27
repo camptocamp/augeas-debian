@@ -1,10 +1,12 @@
 install:
   - sudo apt-get update
-  - sudo apt-get install libxml2-dev libreadline-dev valgrind devscripts
+  - sudo apt-get install libxml2-dev libreadline-dev valgrind
+  - sudo apt-get install git-buildpackage
+  - sudo apt-get install debhelper autotools-dev chrpath naturaldocs texlive-latex-base pkg-config
 language: c
 notifications:
   email: false
   irc:
     channels:
       - "irc.freenode.org#augeas"
-script: debuild
+script: git-buildpackage
