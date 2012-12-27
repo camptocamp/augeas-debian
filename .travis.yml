@@ -9,4 +9,4 @@ notifications:
   irc:
     channels:
       - "irc.freenode.org#augeas"
-script: git-buildpackage
+script: git-buildpackage --git-ignore-branch
