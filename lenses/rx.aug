@@ -5,7 +5,7 @@ Module: Rx
 Author: Raphael Pinson <raphink@gmail.com>
 
 About: License
-  This file is licensed under the LGPLv2+, like the rest of Augeas.
+  This file is licensed under the LGPL v2+, like the rest of Augeas.
 *)
 
 
@@ -15,9 +15,22 @@ module Rx =
 (* Variable: space
    A mandatory space or tab *)
 let space     = /[ \t]+/
+
 (* Variable: opt_space
    An optional space or tab *)
 let opt_space = /[ \t]*/
+
+(* Variable: cl
+   A continued line with a backslash *)
+let cl = /[ \t]*\\\\\n[ \t]*/
+
+(* Variable: cl_or_space
+   A <cl> or a <space> *)
+let cl_or_space = cl | space
+
+(* Variable: cl_or_opt_space
+   A <cl> or a <opt_space> *)
+let cl_or_opt_space = cl | opt_space
 
 (* Group: General strings *)
 
@@ -39,11 +52,15 @@ let integer    = /[0-9]+/
 
 (* Variable: integer
    A relative <integer> *)
-let relinteger = /-?[0-9]+/
+let relinteger = /[-+]?[0-9]+/
 
 (* Variable: decimal
    A decimal value (using ',' or '.' as a separator) *)
 let decimal    = /[0-9]+([.,][0-9]+)?/
+
+(* Variable: reldecimal
+   A relative <decimal> *)
+let reldecimal    = /[+-]?[0-9]+([.,][0-9]+)?/
 
 (* Variable: fspath
    A filesystem path *)

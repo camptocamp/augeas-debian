@@ -296,3 +296,42 @@ test_bdf =
   test multiline_ace get multiline_test =
       { "test_ace" = "val1\n  val2\n   val3" }
 
+  (* Test: lns_ace
+       Ticket #243 *)
+  test lns_ace get "[section1]
+ticket_243 = \"value1;value2#value3\" # end of line comment
+" =
+  { "section1"
+    { "ticket_243" = "\"value1;value2#value3\""
+      { "#comment" = "end of line comment" }
+    }
+  }
+
+  (* Group: TEST list entries *)
+  (* Variable: list_test *)
+  let list_test = "test_ace = val1,val2,val3 # a comment\n"
+  (* Lens: list_ace *)
+  let list_ace = IniFile.entry_list IniFile.entry_re sep_ace RX.word Sep.comma comment_ace
+  (* Test: list_ace
+       Testing the a/c/e combination with a list entry *)
+  test list_ace get list_test =
+  { "test_ace"
+    { "1" = "val1" }
+    { "2" = "val2" }
+    { "3" = "val3" }
+    { "#comment" = "a comment" }
+  }
+
+  (* Variable: list_nocomment_test *)
+  let list_nocomment_test = "test_ace = val1,val2,val3 \n"
+  (* Lens: list_nocomment_ace *)
+  let list_nocomment_ace = IniFile.entry_list_nocomment IniFile.entry_re sep_ace RX.word Sep.comma
+  (* Test: list_nocomment_ace
+       Testing the a/c/e combination with a list entry without end-of-line comment *)
+  test list_nocomment_ace get list_nocomment_test =
+  { "test_ace"
+    { "1" = "val1" }
+    { "2" = "val2" }
+    { "3" = "val3" }
+  }
+

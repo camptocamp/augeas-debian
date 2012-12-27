@@ -4,7 +4,7 @@ Module: Shellvars
  in /etc/sysconfig
 
 About: License
-   This file is licenced under the LGPLv2+, like the rest of Augeas.
+   This file is licenced under the LGPL v2+, like the rest of Augeas.
 
 About: Lens Usage
    To be documented
@@ -13,25 +13,31 @@ About: Lens Usage
 module Shellvars =
   autoload xfm
 
-  let eol = del /[ \t]+|[ \t]*[;\n]/ "\n"
-  let semicol_eol = del /[ \t]*[;\n]/ "\n"
+  let empty   = Util.empty
+  let empty_part_re = Util.empty_generic_re . /\n+/
+  let eol = del (/[ \t]+|[ \t]*[;\n]/ . empty_part_re*) "\n"
+  let semicol_eol = del (/[ \t]*[;\n]/ . empty_part_re*) "\n"
 
   let key_re = /[A-Za-z0-9_]+(\[[0-9]+\])?/ - "unset" - "export"
+  let matching_re = "${!" . key_re . /[\*@]\}/
   let eq = Util.del_str "="
 
-  let comment = Util.comment
-  let comment_eol = Util.comment_eol
+  let eol_for_comment = del /([ \t]*\n)([ \t]*(#[ \t]*)?\n)*/ "\n"
+  let comment = Util.comment_generic_seteol /[ \t]*#[ \t]*/ " # " eol_for_comment
+  (* comment_eol in shell MUST begin with a space *)
+  let comment_eol = Util.comment_generic_seteol /[ \t]+#[ \t]*/ " # " eol_for_comment
   let comment_or_eol = comment_eol | semicol_eol
 
-  let empty   = Util.empty
   let xchgs   = Build.xchgs
   let semicol = del /;?/ ""
 
-  let char  = /[^;#() '"\t\n]|\\\\"/
-  let dquot = /"([^"\\\n]|\\\\.)*"/                    (* " Emacs, relax *)
-  let squot = /'[^'\n]*'/
-  (* For some reason, `` conflicts with comment_or_eol *)
-  let bquot = /`[^#`\n]*`/
+  let char  = /[^`;() '"\t\n]|\\\\"/
+  let dquot = /"([^"\\]|\\\\.)*"/                    (* " Emacs, relax *)
+  let squot = /'[^']*'/
+  let bquot = /`[^`\n]*`/
+  (* dbquot don't take spaces or semi-colons *)
+  let dbquot = /``[^` \t\n;]+``/
+  let dollar_assign = /\$\([^\)#\n]*\)/
 
   let sto_to_semicol = store /[^#; \t\n][^#;\n]+[^#; \t\n]|[^#; \t\n]+/
 
@@ -49,15 +55,16 @@ module Shellvars =
   (* but fairly close.                                                *)
   let simple_value =
     let empty_array = /\([ \t]*\)/ in
-      store (char* | dquot | squot | bquot | empty_array)
+      store (char* | (dquot | squot)+
+            | bquot | dbquot | dollar_assign | empty_array)
 
   let export = [ key "export" . Util.del_ws_spc ]
   let kv = [ Util.indent . export? . key key_re
-           . eq . (simple_value | array) . semicol . comment_or_eol ]
+           . eq . (simple_value | array) . comment_or_eol ]
 
   let var_action (name:string) =
     [ Util.indent . xchgs name ("@" . name) . Util.del_ws_spc
-    . store key_re . semicol . comment_or_eol ]
+    . store (key_re | matching_re) . comment_or_eol ]
 
   let unset = var_action "unset"
   let bare_export = var_action "export"
@@ -67,17 +74,23 @@ module Shellvars =
       . del /\.|source/ "." . label ".source"
       . Util.del_ws_spc . store /[^;=# \t\n]+/ . comment_or_eol ]
 
-  let shell_builtin_cmds = "ulimit"
+  let shell_builtin_cmds = "ulimit" | "shift" | "exit"
 
   let builtin =
     [ Util.indent . label "@builtin"
       . store shell_builtin_cmds
-      . Util.del_ws_spc
-      . [ label "args" . sto_to_semicol ]
+      . (Util.del_ws_spc
+      . [ label "args" . sto_to_semicol ])?
       . comment_or_eol ]
 
   let keyword (kw:string) = Util.indent . Util.del_str kw
   let keyword_label (kw:string) (lbl:string) = keyword kw . label lbl
+
+  let return =
+    [ Util.indent . label "@return"
+      . Util.del_str "return"
+      . ( Util.del_ws_spc . store Rx.integer )?
+      . comment_or_eol ]
 
 
 (************************************************************************
@@ -99,7 +112,7 @@ module Shellvars =
   let cond_if (entry:lens) =
     let elif = [ generic_cond_start "elif" "@elif" "then" entry+ ] in
     let else = [ keyword_label "else" "@else" . eol . entry+ ] in
-    generic_cond "if" "@if" "then" (entry+ . elif? . else?) "fi"
+    generic_cond "if" "@if" "then" (entry+ . elif* . else?) "fi"
 
   let loop_for (entry:lens) =
     generic_cond "for" "@for" "do" entry+ "done"
@@ -117,88 +130,97 @@ module Shellvars =
     let case_entry = [ label "@case_entry"
                        . Util.indent . store /[^ \t\n\)]+/
                        . Util.del_str ")" . eol
-                       . entry+
+                       . entry*
                        . Util.indent . Util.del_str ";;" . eol ] in
       [ keyword_label "case" "@case" . Sep.space
-        . store char+
+        . store (char+ | ("\"" . char+ . "\""))
         . del /[ \t\n]+/ " " . Util.del_str "in" . eol
-        . case_entry+
+        . (empty* . comment* . case_entry)*
+        . empty* . comment*
         . keyword "esac" . comment_or_eol ]
 
+  let function (entry:lens) =
+    [ Util.indent . label "@function"
+      . del /(function[ \t]+)?/ ""
+      . store Rx.word . del /[ \t]*\(\)/ "()"
+      . eol . Util.del_str "{" . eol
+      . entry+
+      . Util.indent . Util.del_str "}" . eol ]
+
   let rec rec_entry =
-    let entry = comment | empty | source | kv
-              | unset | bare_export | builtin | rec_entry in
+    let entry = comment | source | kv
+              | unset | bare_export | builtin | return | rec_entry in
         cond_if entry
       | loop_for entry
       | loop_select entry
       | loop_while entry
       | loop_until entry
       | case entry
+      | function entry
 
-  let lns = (comment | empty | source | kv | unset | bare_export | builtin | rec_entry) *
+  let lns_norec = empty* . (comment | source | kv | unset | bare_export | builtin | return) *
+
+  let lns = empty* . (comment | source | kv | unset | bare_export | builtin | return | rec_entry) *
 
   let sc_incl (n:string) = (incl ("/etc/sysconfig/" . n))
-  let filter_sysconfig =
-      sc_incl "atd" .
-      sc_incl "authconfig" .
-      sc_incl "autofs" .
-      sc_incl "clock" .
-      sc_incl "cpuspeed" .
-      sc_incl "crond" .
-      sc_incl "crontab" .
-      sc_incl "desktop" .
-      sc_incl "firstboot" .
-      sc_incl "grub" .
-      sc_incl "hsqldb" .
-      sc_incl "httpd" .
-      sc_incl "i18n" .
-      sc_incl "init" .
-      sc_incl "iptables-config" .
-      sc_incl "irda" .
-      sc_incl "irqbalance" .
-      sc_incl "kdump" .
-      sc_incl "keyboard" .
-      sc_incl "kudzu" .
-      sc_incl "libvirtd" .
-      sc_incl "lircd" .
-      sc_incl "nasd" .
-      sc_incl "netconsole" .
-      sc_incl "network" .
-      sc_incl "nfs" .
-      sc_incl "ntpd" .
-      sc_incl "prelink" .
-      sc_incl "puppet" .
-      sc_incl "puppetmaster" .
-      sc_incl "readonly-root" .
-      sc_incl "rsyslog" .
-      sc_incl "samba" .
-      sc_incl "saslauthd" .
-      sc_incl "selinux" .
-      sc_incl "sendmail" .
-      sc_incl "smartmontools" .
-      sc_incl "snmpd" .
-      sc_incl "snmpd.options" .
-      sc_incl "snmptrapd" .
-      sc_incl "snmptrapd.options" .
-      sc_incl "spamassassin" .
-      sc_incl "suseconfig" .
-      sc_incl "sysstat" .
-      sc_incl "system-config-users" .
-      sc_incl "vncservers" .
-      sc_incl "wpa_supplicant" .
-      sc_incl "xend" .
-      sc_incl "xendomains"
+  let sc_excl (n:string) = (excl ("/etc/sysconfig/" . n))
 
-  let filter_ifcfg   = incl "/etc/sysconfig/network-scripts/ifcfg-*"
-                     . incl "/etc/sysconfig/network/ifcfg-*"
+  let filter_sysconfig =
+      sc_incl "*" .
+      sc_excl "bootloader" .
+      sc_excl "hw-uuid" .
+      sc_excl "hwconf" .
+      sc_excl "ip*tables" .
+      sc_excl "kernel" .
+      sc_excl "*.pub" .
+      sc_excl "sysstat.ioconf" .
+      sc_excl "system-config-firewall" .
+      sc_excl "system-config-securitylevel" .
+      sc_excl "network" .
+      sc_incl "network/config" .
+      sc_incl "network/dhcp" .
+      sc_incl "network/dhcp6r" .
+      sc_incl "network/dhcp6s" .
+      sc_incl "network/ifcfg-*" .
+      sc_incl "network/if-down.d/*" .
+      sc_incl "network/ifroute-*" .
+      sc_incl "network/if-up.d/*" .
+      sc_incl "network/providers/*" .
+      sc_excl "network-scripts" .
+      sc_incl "network-scripts/ifcfg-*" .
+      sc_excl "rhn" .
+      sc_incl "rhn/allowed-actions/*" .
+      sc_excl "rhn/allowed-actions/script" .
+      sc_incl "rhn/allowed-actions/script/*" .
+      sc_incl "rhn/rhnsd" .
+      sc_excl "SuSEfirewall2.d" .
+      sc_incl "SuSEfirewall2.d/cobbler" .
+      sc_incl "SuSEfirewall2.d/services/*" .
+      sc_excl "SuSEfirewall2.d/services/TEMPLATE"
+
   let filter_default = incl "/etc/default/*"
+                     . excl "/etc/default/grub_installdevice*"
+                     . excl "/etc/default/whoopsie"
   let filter_misc    = incl "/etc/arno-iptables-firewall/debconf.cfg"
                      . incl "/etc/cron-apt/config"
                      . incl "/etc/environment"
                      . incl "/etc/blkid.conf"
+                     . incl "/etc/adduser.conf"
+                     . incl "/etc/cowpoke.conf"
+                     . incl "/etc/cvs-cron.conf"
+                     . incl "/etc/cvs-pserver.conf"
+                     . incl "/etc/devscripts.conf"
+                     . incl "/etc/lintianrc"
+                     . incl "/etc/lsb-release"
+                     . incl "/etc/os-release"
+                     . incl "/etc/popularity-contest.conf"
+                     . incl "/etc/rc.conf"
+                     . incl "/etc/selinux/config"
+                     . incl "/etc/ucf.conf"
+                     . incl "/etc/locale.conf"
+                     . incl "/etc/vconsole.conf"
 
   let filter = filter_sysconfig
-             . filter_ifcfg
              . filter_default
              . filter_misc
              . Util.stdexcl

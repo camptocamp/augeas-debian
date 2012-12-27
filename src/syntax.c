@@ -81,6 +81,20 @@ struct ctx {
     struct binding *local;
 };
 
+static int init_fatal_exn(struct error *error) {
+    if (error->exn != NULL)
+        return 0;
+    error->exn = make_exn_value(ref(error->info), "Error during evaluation");
+    if (error->exn == NULL)
+        return -1;
+    error->exn->exn->seen = 1;
+    error->exn->exn->error = 1;
+    error->exn->exn->lines = NULL;
+    error->exn->exn->nlines = 0;
+    error->exn->ref = REF_MAX;
+    return 0;
+}
+
 static void format_error(struct info *info, aug_errcode_t code,
                          const char *format, va_list ap) {
     struct error *error = info->error;
@@ -434,18 +448,6 @@ void exn_printf_line(struct value *exn, const char *format, ...) {
         exn_add_lines(exn, 1, line);
 }
 
-struct value *exn_error(void) {
-    static const struct exn exn = {
-        .info = NULL, .seen = 1, .error = 1,
-        .message = (char *) "Error during evaluation",
-        .nlines = 0, .lines = NULL };
-    static const struct value value = {
-        .ref = REF_MAX, /* Protect against being freed */
-        .info = NULL, .tag = V_EXN,
-        { .exn = (struct exn *) &exn } };
-    return (struct value *) &value;
-}
-
 /*
  * Modules
  */
@@ -651,7 +653,7 @@ static void dump_ctx(struct ctx *ctx) {
 /*
  * Values
  */
-static void print_tree(FILE *out, int indent, struct tree *tree) {
+void print_tree_braces(FILE *out, int indent, struct tree *tree) {
     if (tree == NULL) {
         fprintf(out, "(null tree)\n");
         return;
@@ -665,7 +667,7 @@ static void print_tree(FILE *out, int indent, struct tree *tree) {
             fprintf(out, " = \"%s\"", t->value);
         if (t->children != NULL) {
             fputc('\n', out);
-            print_tree(out, indent + 2, t->children);
+            print_tree_braces(out, indent + 2, t->children);
             for (int i=0; i < indent; i++) fputc(' ', out);
         } else {
             fputc(' ', out);
@@ -693,7 +695,7 @@ static void print_value(FILE *out, struct value *v) {
         fprintf(out, ">");
         break;
     case V_TREE:
-        print_tree(out, 0, v->origin);
+        print_tree_braces(out, 0, v->origin);
         break;
     case V_FILTER:
         fprintf(out, "<filter:");
@@ -1441,6 +1443,7 @@ static struct value *compile_minus(struct term *exp, struct ctx *ctx) {
             v->regexp = re;
         }
     } else {
+        v = NULL;
         fatal_error(info, "Tried to subtract a %s and a %s to yield a %s",
                     type_name(exp->left->type), type_name(exp->right->type),
                     type_name(t));
@@ -1483,7 +1486,7 @@ static struct value *compile_compose(struct term *exp, struct ctx *ctx) {
             free(f);
             free(e);
             unref(func, term);
-            return exn_error();
+            return info->error->exn;
         }
         v = make_closure(func, ctx->local);
         unref(func, term);
@@ -1547,6 +1550,7 @@ static struct value *compile_concat(struct term *exp, struct ctx *ctx) {
         struct lens *l2 = v2->lens;
         v = lns_make_concat(ref(info), ref(l1), ref(l2), LNS_TYPE_CHECK(ctx));
     } else {
+        v = NULL;
         fatal_error(info, "Tried to concat a %s and a %s to yield a %s",
                     type_name(exp->left->type), type_name(exp->right->type),
                     type_name(t));
@@ -1700,6 +1704,7 @@ static int compile_test(struct term *term, struct ctx *ctx) {
 
     if (term->tr_tag == TR_EXN) {
         if (!EXN(actual)) {
+            print_info(stdout, term->info);
             printf("Test run should have produced exception, but produced\n");
             print_value(stdout, actual);
             printf("\n");
@@ -1733,7 +1738,7 @@ static int compile_test(struct term *term, struct ctx *ctx) {
             print_info(stdout, term->info);
             printf("\n");
             if (actual->tag == V_TREE) {
-                print_tree(stdout, 2, actual->origin->children);
+                print_tree_braces(stdout, 2, actual->origin->children);
             } else {
                 print_value(stdout, actual);
             }
@@ -1770,7 +1775,7 @@ static int compile_decl(struct term *term, struct ctx *ctx) {
             free(error->details);
             error->details = ms.buf;
         }
-        result = ! EXN(v);
+        result = !(EXN(v) || HAS_ERR(ctx->aug));
         unref(v, value);
         return result;
     } else if (term->tag == A_TEST) {
@@ -2002,8 +2007,11 @@ static int load_module(struct augeas *aug, const char *name) {
 int interpreter_init(struct augeas *aug) {
     int r;
 
-    aug->modules = builtin_init(aug->error);
+    r = init_fatal_exn(aug->error);
+    if (r < 0)
+        return -1;
 
+    aug->modules = builtin_init(aug->error);
     if (aug->flags & AUG_NO_MODL_AUTOLOAD)
         return 0;
 

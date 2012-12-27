@@ -65,6 +65,10 @@
  * Information about files */
 #define AUGEAS_META_FILES AUGEAS_META_TREE AUGEAS_FILES_TREE
 
+/* Define: AUGEAS_META_TEXT
+ * Information about text (see aug_text_store and aug_text_retrieve) */
+#define AUGEAS_META_TEXT AUGEAS_META_TREE "/text"
+
 /* Define: AUGEAS_META_ROOT
  * The root directory */
 #define AUGEAS_META_ROOT AUGEAS_META_TREE "/root"
@@ -283,6 +287,9 @@ char *format_pos(const char *text, int pos);
  */
 char* xread_file(const char *path);
 
+/* Like xread_file, but caller supplies a file pointer */
+char* xfread_file(FILE *fp);
+
 /* Get the error message for ERRNUM in a threadsafe way. Based on libvirt's
  * virStrError
  */
@@ -496,7 +503,8 @@ typedef enum {
     PATHX_ENOMATCH,
     PATHX_EARITY,
     PATHX_EREGEXP,
-    PATHX_EMMATCH
+    PATHX_EMMATCH,
+    PATHX_EREGEXPFLAG
 } pathx_errcode_t;
 
 struct pathx;
