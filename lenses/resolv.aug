@@ -8,7 +8,7 @@ About: Reference
   This lens tries to keep as close as possible to `man resolv.conf` where possible.
 
 About: Licence
-  This file is licensed under the LGPLv2+, like the rest of Augeas.
+  This file is licensed under the LGPL v2+, like the rest of Augeas.
 
 About: Lens Usage
 
@@ -87,7 +87,8 @@ let options =
       let options_entry = Build.key_value ("ndots"|"timeout"|"attempts") 
                                           (Util.del_str ":") (store Rx.integer)
                         | Build.flag ("debug"|"rotate"|"no-check-names"
-                                     |"inet6"|"ip6-bytestring"|"edns0")
+                                     |"inet6"|"ip6-bytestring"|"edns0"
+				     |"single-request-reopen")
                         | ip6_dotint
 
             in Build.key_value_line_comment

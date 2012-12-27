@@ -5,7 +5,7 @@ Module: IniFile
 Author: Raphael Pinson <raphink@gmail.com>
 
 About: License
-  This file is licensed under the LGPLv2+, like the rest of Augeas.
+  This file is licensed under the LGPL v2+, like the rest of Augeas.
 
 About: TODO
   Things to add in the future
@@ -57,6 +57,17 @@ let sep (pat:regexp) (default:string)
                        = Sep.opt_space . del pat default
 
 (*
+Variable: sep_noindent
+  Generic separator, no indentation
+
+  Parameters:
+    pat:regexp - the pattern to delete
+    default:string - the default string to use
+*)
+let sep_noindent (pat:regexp) (default:string)
+                       = del pat default
+
+(*
 Variable: sep_re
   The default regexp for a separator
 *)
@@ -83,7 +94,8 @@ let sto_to_eol         = Sep.opt_space . store Rx.space_in
 Variable: to_comment_re
   Regex until comment
 *)
-let to_comment_re = /[^;# \t\n][^;#\n]*[^;# \t\n]|[^;# \t\n]/
+let to_comment_re = /[^";# \t\n][^";#\n]*[^";# \t\n]|[^";# \t\n]/
+                  | /"[^\n"]*"/
 
 (*
 Variable: sto_to_comment
@@ -91,9 +103,20 @@ Variable: sto_to_comment
 *)
 let sto_to_comment = Sep.opt_space . store to_comment_re
 
+(*
+Variable: sto_multiline
+  Store multiline values
+*)
 let sto_multiline = Sep.opt_space
          . store (to_comment_re
                . (/[ \t]*\n/ . Rx.space . to_comment_re)*)
+
+(*
+Variable: sto_multiline_nocomment
+  Store multiline values without an end-of-line comment
+*)
+let sto_multiline_nocomment = Sep.opt_space
+         . store (Rx.space_in . (/[ \t]*\n/ . Rx.space . Rx.space_in)*)
 
 
 (* Group: Define comment and defaults *)
@@ -114,6 +137,10 @@ View: comment
 *)
 let comment (pat:regexp) (default:string)
                        = [ label "#comment" . sep pat default
+		         . sto_to_eol? . eol ]
+
+let comment_noindent (pat:regexp) (default:string)
+                       = [ label "#comment" . sep_noindent pat default
 		         . sto_to_eol? . eol ]
 (*
 Variable: comment_re
@@ -151,8 +178,31 @@ let entry (kw:regexp) (sep:lens) (comment:lens)
                        = [ key kw . sep . sto_to_comment? . (comment|eol) ] | comment
 
 
+(*
+View: entry_multiline
+  Generic multiline INI File entry
+
+  Parameters:
+    kw:regexp    - keyword regexp for the label
+    sep:lens     - lens to use as key/value separator
+    comment:lens - lens to use as comment
+*)
 let entry_multiline (kw:regexp) (sep:lens) (comment:lens)
-                       = [ key kw . sep . sto_multiline? . (comment|eol) ] | comment
+                       = [ key kw . sep . sto_multiline? . (comment|eol) ]
+                         | comment
+
+(*
+View: entry_multiline_nocomment
+  Generic multiline INI File entry without an end-of-line comment
+
+  Parameters:
+    kw:regexp    - keyword regexp for the label
+    sep:lens     - lens to use as key/value separator
+    comment:lens - lens to use as comment
+*)
+let entry_multiline_nocomment (kw:regexp) (sep:lens) (comment:lens)
+                       = [ key kw . sep . sto_multiline_nocomment? . eol ]
+                         | comment
 
 
 (*
@@ -174,6 +224,36 @@ let indented_entry (kw:regexp) (sep:lens) (comment:lens)
                            (comment|eol)
                          ]
                          | comment
+(*
+View: entry_list
+  Generic INI File list entry
+
+  Parameters:
+    kw:regexp     - keyword regexp for the label
+    sep:lens      - lens to use as key/value separator
+    sto:regexp    - store regexp for the values
+    list_sep:lens - lens to use as list separator
+    comment:lens  - lens to use as comment
+*)
+let entry_list (kw:regexp) (sep:lens) (sto:regexp) (list_sep:lens) (comment:lens) =
+  let list = counter "elem"
+      . Build.opt_list [ seq "elem" . store sto ] list_sep
+  in Build.key_value_line_comment kw sep (Sep.opt_space . list) comment
+
+(*
+View: entry_list_nocomment
+  Generic INI File list entry without an end-of-line comment
+
+  Parameters:
+    kw:regexp     - keyword regexp for the label
+    sep:lens      - lens to use as key/value separator
+    sto:regexp    - store regexp for the values
+    list_sep:lens - lens to use as list separator
+*)
+let entry_list_nocomment (kw:regexp) (sep:lens) (sto:regexp) (list_sep:lens) =
+  let list = counter "elem"
+      . Build.opt_list [ seq "elem" . store sto ] list_sep
+  in Build.key_value_line kw sep (Sep.opt_space . list)
 
 (*
 Variable: entry_re

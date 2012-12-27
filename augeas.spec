@@ -1,5 +1,5 @@
 Name:           augeas
-Version:        0.10.0
+Version:        1.0.0
 Release:        1%{?dist}
 Summary:        A library for changing configuration files
 
@@ -11,6 +11,8 @@ BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 BuildRequires:  readline-devel libselinux-devel libxml2-devel
 Requires:       %{name}-libs = %{version}-%{release}
+# Bundling exception for gnulib: https://fedorahosted.org/fpc/ticket/174
+Provides:       bundled(gnulib)
 
 %description
 A library for programmatically editing configuration files. Augeas parses
@@ -85,6 +87,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/pkgconfig/augeas.pc
 
 %changelog
+* Fri Dec 21 2012 David Lutterkort <lutter@redhat.com> - 1.0.0-1
+- New version
+
 * Fri Dec  2 2011 David Lutterkort <lutter@redhat.com> - 0.10.0-1
 - New version
 

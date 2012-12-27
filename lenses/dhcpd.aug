@@ -92,10 +92,8 @@ let ip                = Rx.ipv4
    *   squot - strings that contain an unescaped double quote
    *)
   let bare = del qchar? "" . store (bchar+) . del qchar? ""
-  let dquot =
-    del qchar "\"" . store (bchar* . /[ \t'\/]/ . bchar*)+ . del qchar "\""
-  let squot =
-    dels "'" . store ((bchar|/[ \t\/]/)* . "\"" . (bchar|/[ \t\/]/)*)+ . dels "'"
+  let quote = Quote.do_quote (store (bchar* . /[ \t'\/]/ . bchar*)+)
+  let dquote = Quote.do_dquote (store (bchar+))
 
 let sto_to_spc        = store /[^\\#,;\{\}" \t\n]+|"[^\\#"\n]+"/
 let sto_to_scl        = store /[^ \t;][^;\n=]+[^ \t;]|[^ \t;=]+/
@@ -159,7 +157,6 @@ let stmt_string_re    = "ddns-update-style"
                       | "ddns-domainname"
                       | "ddns-rev-domainname"
                       | "log-facility"
-                      | "filename"
                       | "server-name"
                       | "fixed-address"
                       | /failover[ ]+peer/
@@ -194,15 +191,18 @@ let stmt_string_re    = "ddns-update-style"
                       | "use-host-decl-names"
                       | "use-lease-addr-for-default-route"
                       | "vendor-option-space"
+                      | "primary"
 
-let stmt_string_tpl (l:lens) = [ indent
-                        . key stmt_string_re
+let stmt_string_tpl (kw:regexp) (l:lens) = [ indent
+                        . key kw
                         . sep_spc
                         . l
                         . sep_scl
                         . eos ]
 
-let stmt_string  = stmt_string_tpl bare |stmt_string_tpl squot | stmt_string_tpl dquot
+let stmt_string  = stmt_string_tpl stmt_string_re bare
+                 | stmt_string_tpl stmt_string_re quote
+                 | stmt_string_tpl "filename" dquote
 
 (************************************************************************
  *                         RANGE STATEMENTS
@@ -241,8 +241,8 @@ let stmt_option_code  = [ label "label" . store word . sep_spc ]
                         . [ label "type" . store word ]
 
 
-let stmt_option_list  = ([ label "arg" . bare ] | [ label "arg" . dquot ] | [ label "arg" . squot ])
-                        . ( sep_com . ([ label "arg" . bare ] | [ label "arg" . dquot ] | [ label "arg" . squot ]))*
+let stmt_option_list  = ([ label "arg" . bare ] | [ label "arg" . quote ])
+                        . ( sep_com . ([ label "arg" . bare ] | [ label "arg" . quote ]))*
 
 let stmt_option_basic = [ key word . sep_spc . stmt_option_list ]
 let stmt_option_extra = [ key word . sep_spc . store /true|false/ . sep_spc . stmt_option_list ]
@@ -272,8 +272,7 @@ let stmt_option = stmt_option1 | stmt_option2
    we support basic use case *)
 
 let stmt_subclass = [ indent . key "subclass" . sep_spc .
-                      ([ label "name" . dquot ]|
-                       [ label "name" . squot ]|
+                      ([ label "name" . quote ]|
                        [ label "name" . bare ]) . sep_spc .
                        [ label "value" . bare ] . sep_scl . eos ]
 
@@ -296,8 +295,7 @@ let del_deny  = del /deny[ \t]+members[ \t]+of/ "deny members of"
 
 let stmt_secu_tpl (l:lens) (s:string) =
                   [ indent . l . sep_spc . label s . bare . sep_scl . eos ] |
-                  [ indent . l . sep_spc . label s . squot . sep_scl . eos ] |
-                  [ indent . l . sep_spc . label s . dquot . sep_scl . eos ]
+                  [ indent . l . sep_spc . label s . quote . sep_scl . eos ]
 
 let stmt_secu         = [ indent . key stmt_secu_re . sep_spc .
                           store allow_deny_re . sep_scl . eos ] |
@@ -318,7 +316,7 @@ let fct_args = [ label "args" . dels "(" . sep_osp .
                         sep_osp . dels ")" ]
 
 let stmt_match_if = [ dels "if" . sep_spc . store fct_re . sep_osp . label "function" . fct_args ] .
-                      sep_eq . ([ label "value" . bare ]|[ label "value" . squot ]|[ label "value" . dquot ])
+                      sep_eq . ([ label "value" . bare ]|[ label "value" . quote ])
 
 let stmt_match_pfv = [ label "function" . store "pick-first-value" . sep_spc .
                        dels "(" . sep_osp .

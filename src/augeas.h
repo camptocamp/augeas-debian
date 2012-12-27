@@ -54,6 +54,10 @@ enum aug_flags {
                                      encountering error during aug_init */
 };
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Function: aug_init
  *
  * Initialize the library.
@@ -138,6 +142,23 @@ int aug_defnode(augeas *aug, const char *name, const char *expr,
  */
 int aug_get(const augeas *aug, const char *path, const char **value);
 
+/* Function: aug_label
+ *
+ * Lookup the label associated with PATH. LABEL can be NULL, in which case
+ * it is ignored. If LABEL is not NULL, it is used to return a pointer to
+ * the value associated with PATH if PATH matches exactly one node. If PATH
+ * matches no nodes or more than one node, *LABEL is set to NULL.
+ *
+ * The string *LABEL must not be freed by the caller, and is valid as long
+ * as its node remains unchanged.
+ *
+ * Returns:
+ * 1 if there is exactly one node matching PATH, 0 if there is none,
+ * and a negative value if there is more than one node matching PATH, or if
+ * PATH is not a legal path expression.
+ */
+int aug_label(const augeas *aug, const char *path, const char **label);
+
 /* Function: aug_set
  *
  * Set the value associated with PATH to VALUE. VALUE is copied into the
@@ -221,6 +242,15 @@ int aug_rm(augeas *aug, const char *path);
  */
 int aug_mv(augeas *aug, const char *src, const char *dst);
 
+/* Function: aug_rename
+ *
+ * Rename the label of all nodes matching SRC to LBL.
+ *
+ * Returns:
+ * The number of nodes renamed on success and -1 on failure.
+ */
+int aug_rename(augeas *aug, const char *src, const char *lbl);
+
 /* Function: aug_match
  *
  * Returns:
@@ -301,6 +331,31 @@ int aug_save(augeas *aug);
  */
 int aug_load(augeas *aug);
 
+/* Function: aug_text_store
+ *
+ * Use the value of node NODE as a string and transform it into a tree
+ * using the lens LENS and store it in the tree at PATH, which will be
+ * overwritten. PATH and NODE are path expressions.
+ *
+ * Returns:
+ * 0 on success, or a negative value on failure
+ */
+int aug_text_store(augeas *aug, const char *lens, const char *node,
+                   const char *path);
+
+/* Function: aug_text_retrieve
+ *
+ * Transform the tree at PATH into a string using lens LENS and store it in
+ * the node NODE_OUT, assuming the tree was initially generated using the
+ * value of node NODE_IN. PATH, NODE_IN, and NODE_OUT are path expressions.
+ *
+ * Returns:
+ * 0 on success, or a negative value on failure
+ */
+int aug_text_retrieve(struct augeas *aug, const char *lens,
+                      const char *node_in, const char *path,
+                      const char *node_out);
+
 /* Function: aug_print
  *
  * Print each node matching PATH and its descendants to OUT.
@@ -322,6 +377,20 @@ int aug_print(const augeas *aug, FILE *out, const char *path);
  */
 int aug_to_xml(const augeas *aug, const char *path, xmlNode **xmldoc,
                unsigned int flags);
+
+/*
+ * Function: aug_transform
+ *
+ * Add a transform for FILE using LENS.
+ * EXCL specifies if this the file is to be included (0)
+ * or excluded (1) from the LENS.
+ * The LENS maybe be a module name or a full lens name.
+ * If a module name is given, then lns will be the lens assumed.
+ *
+ * Returns:
+ * 1 on success, -1 on failure
+ */
+int aug_transform(augeas *aug, const char *lens, const char *file, int excl);
 
 /*
  * Function: aug_srun
@@ -362,7 +431,8 @@ typedef enum {
     AUG_ENOSPAN,        /* No span for this node */
     AUG_EMVDESC,        /* Cannot move node into its descendant */
     AUG_ECMDRUN,        /* Failed to execute command */
-    AUG_EBADARG         /* Invalid argument in funcion call */
+    AUG_EBADARG,        /* Invalid argument in funcion call */
+    AUG_ELABEL          /* Invalid label */
 } aug_errcode_t;
 
 /* Return the error code from the last API call */
@@ -381,6 +451,12 @@ const char *aug_error_minor_message(augeas *aug);
  * occurred. The returned value can only be used until the next API call
  */
 const char *aug_error_details(augeas *aug);
+
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif
 
 

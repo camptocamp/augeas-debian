@@ -9,7 +9,7 @@ About: Reference
   Online Apache configuration manual: http://httpd.apache.org/docs/trunk/
 
 About: License
-    This file is licensed under the LGPLv2+.
+    This file is licensed under the LGPL v2+.
 
 About: Lens Usage
   Sample usage of this lens in augtool
@@ -45,7 +45,7 @@ autoload xfm
 let dels (s:string)     = del s s
 
 (* deal with continuation lines *)
-let sep_spc    =  del /([ \t]+|[ \t]*\\\\\n[ \t]*)/ " "
+let sep_spc    =  del /([ \t]+|[ \t]*\\\\\r?\n[ \t]*)/ " "
 
 let sep_osp             = Sep.opt_space
 let sep_eq              = del /[ \t]*=[ \t]*/ "="
@@ -54,15 +54,15 @@ let nmtoken             = /[a-zA-Z:_][a-zA-Z0-9:_.-]*/
 let word                = /[a-zA-Z][a-zA-Z0-9._-]*/
 
 let comment             = Util.comment
-let eol                 = Util.eol
-let empty               = Util.empty
+let eol                 = Util.doseol
+let empty               = Util.empty_dos
 let indent              = Util.indent
 
 (* borrowed from shellvars.aug *)
-let char_arg_dir  = /[^ '"\t\n]|\\\\"|\\\\'/
-let char_arg_sec  = /[^ '"\t\n>]|\\\\"|\\\\'/
-let dquot = /"([^"\\\n]|\\\\.)*"/
-let squot = /'([^'\\\n]|\\\\.)*'/
+let char_arg_dir  = /[^ '"\t\r\n]|\\\\"|\\\\'/
+let char_arg_sec  = /[^ '"\t\r\n>]|\\\\"|\\\\'/
+let dquot = /"([^"\\\r\n]|\\\\.)*"/
+let squot = /'([^'\\\r\n]|\\\\.)*'/
 
 (******************************************************************
  *                            Attributes
@@ -77,9 +77,11 @@ let directive = [ indent . label "directive" . store word .
                   (sep_spc . argv arg_dir)? . eol ]
 
 let section (body:lens) =
-    let h = (sep_spc . argv arg_sec)? . sep_osp .
+    let inner = (sep_spc . argv arg_sec)? . sep_osp .
              dels ">" . eol . body* . indent . dels "</" in
-        [ indent . dels "<" . square word h . del ">" ">" . eol ]
+    let kword = key word in
+    let dword = del word "a" in
+        [ indent . dels "<" . square kword inner dword . del ">" ">" . eol ]
 
 let rec content = section (content|directive|comment|empty)
 

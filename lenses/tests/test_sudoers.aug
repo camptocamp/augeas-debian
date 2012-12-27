@@ -1,6 +1,23 @@
 module Test_sudoers =
 
-   let conf = "
+let test_user = [ label "user" . Sudoers.sto_to_com_user . Util.eol ]*
+
+(* Test: test_user *)
+test test_user get "root
+@pbuilder
++secre-taries
+@my\ admin\ group
+EXAMPLE\\\\cslack
+MY\ EX-AMPLE\ 9\\\\cslack\ group
+" =
+  { "user" = "root" }
+  { "user" = "@pbuilder" }
+  { "user" = "+secre-taries" }
+  { "user" = "@my\\ admin\\ group" }
+  { "user" = "EXAMPLE\\\\cslack" }
+  { "user" = "MY\\ EX-AMPLE\\ 9\\\\cslack\\ group" }
+
+let conf = "
   Host_Alias LOCALNET = 192.168.0.0/24, localhost
 
    # User alias specification
@@ -26,6 +43,7 @@ Cmnd_Alias \
 Defaults   !visiblepw
 
 Defaults:buildd env_keep+=\"APT_CONFIG DEBIAN_FRONTEND SHELL\"
+Defaults!PBUILDER env_keep+=\"HOME ARCH DIST DISTRIBUTION PDEBUILD_PBUILDER\"
 
 # User privilege specification
 root    ALL=(ALL) ALL
@@ -100,6 +118,15 @@ www-data +biglab=(rpinson)NOEXEC: ICAL \
               { "var" = "APT_CONFIG" }
               { "var" = "DEBIAN_FRONTEND" }
               { "var" = "SHELL" } } }
+      { "Defaults"
+          { "type" = "!PBUILDER" }
+          { "env_keep"
+              { "append" }
+              { "var" = "HOME" }
+              { "var" = "ARCH" }
+              { "var" = "DIST" }
+              { "var" = "DISTRIBUTION" }
+              { "var" = "PDEBUILD_PBUILDER" } } }
       {}
       { "#comment" = "User privilege specification" }
       { "spec"
@@ -212,3 +239,28 @@ test Sudoers.lns get commenteol =
     { "command" = "ALL"
         { "runas_user"  = "ALL" } } }
     { "#comment" = "all root" } }
+
+(* Allow = in commands *)
+test Sudoers.spec get "root ALL= /usr/bin/mylvmbackup --configfile=/etc/mylvbackup_amanda.conf\n" =
+  { "spec"
+    { "user" = "root" }
+    { "host_group"
+      { "host" = "ALL" }
+      { "command" = "/usr/bin/mylvmbackup --configfile=/etc/mylvbackup_amanda.conf" } } }
+
+(* Allow commands without full path
+   -- if they begin with a lowcase letter *)
+test Sudoers.spec get "root ALL= sudoedit /etc/passwd\n" =
+  { "spec"
+    { "user" = "root" }
+    { "host_group"
+      { "host" = "ALL" }
+      { "command" = "sudoedit /etc/passwd" } } }
+
+(* Ticket #263, quoted values in defaults line *)
+let defaults_spaces = "Defaults       passprompt=\"Your SecurID Passcode: \"\n"
+test Sudoers.lns get defaults_spaces =
+  { "Defaults"
+    { "passprompt" = "\"Your SecurID Passcode: \"" }
+  }
+

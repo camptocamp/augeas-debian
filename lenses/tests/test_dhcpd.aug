@@ -373,3 +373,22 @@ test Dhcpd.lns get "subclass \"allocation-class-1\" 1:8:0:2b:4c:39:ad;" =
 
 (* overall test *)
 test Dhcpd.lns put conf after rm "/x" = conf
+
+(* bug #293: primary should support argument *)
+let input293 = "zone EXAMPLE.ORG. {
+  primary 127.0.0.1;
+}"
+
+test Dhcpd.lns get input293 = 
+  { "zone" = "EXAMPLE.ORG."
+    { "primary" = "127.0.0.1" }
+  }
+
+(* bug #311: filename should be quoted *)
+let input311 = "subnet 172.16.0.0 netmask 255.255.255.0 {
+filename \"pxelinux.0\";
+}"
+
+test Dhcpd.lns put "subnet 172.16.0.0 netmask 255.255.255.0 {
+}" after
+  set "subnet/filename" "pxelinux.0" = input311
