@@ -1,3 +1,10 @@
+augeas (1.0.0-0ubuntu1) raring; urgency=low
+
+  * New upstream version.
+  * Drop all patches. 
+
+ -- Raphaël Pinson <raphink@ubuntu.com>  Thu, 27 Dec 2012 10:07:10 +0100
+
 augeas (0.10.0-1fakesync1ubuntu2) raring; urgency=low
 
   * Fix FTBFS: Avoid assuming that gets is declared.
